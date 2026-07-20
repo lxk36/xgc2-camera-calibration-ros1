@@ -87,7 +87,7 @@ function applyState(s) {
 
 async function poll() {
   try {
-    const res = await fetch("/api/v1/intrinsic/state", { cache: "no-store" });
+    const res = await fetch("api/v1/intrinsic/state", { cache: "no-store" });
     applyState(await res.json());
   } catch (err) {
     el("conn").textContent = "disconnected";
@@ -96,29 +96,29 @@ async function poll() {
 }
 
 function refreshImage() {
-  el("stream").src = "/api/v1/intrinsic/image.jpg?t=" + Date.now();
+  el("stream").src = "api/v1/intrinsic/image.jpg?t=" + Date.now();
 }
 
 function wireButtons() {
   el("btn-calibrate").addEventListener("click", async () => {
     setStatus("Calibrating…");
-    const r = await postJSON("/api/v1/intrinsic/calibrate");
+    const r = await postJSON("api/v1/intrinsic/calibrate");
     setStatus(r.ok === false ? (r.error || "Not enough coverage yet.") : "Calibrated and saved.");
     poll();
   });
   el("btn-reset").addEventListener("click", async () => {
-    await postJSON("/api/v1/intrinsic/reset");
+    await postJSON("api/v1/intrinsic/reset");
     setStatus("Coverage reset.");
     poll();
   });
 
   el("btn-reset-pose").addEventListener("click", () =>
-    postJSON("/api/v1/intrinsic/reset_pose").then((r) =>
+    postJSON("api/v1/intrinsic/reset_pose").then((r) =>
       setStatus(r.ok === false ? r.error : "Camera reset to launch pose.")));
   el("btn-auto").addEventListener("click", async () => {
     autoRunning = true; el("btn-auto").disabled = true;
     setStatus("Auto-run: sweeping every pose…");
-    const r = await postJSON("/api/v1/intrinsic/auto_run");
+    const r = await postJSON("api/v1/intrinsic/auto_run");
     autoRunning = false;
     setStatus(r && r.ok ? `Auto-run done — ${r.samples} samples. Press Calibrate.` : (r.error || "Auto-run failed."));
     poll();
@@ -223,7 +223,7 @@ function updateRefPanel() {
   const t = targets[idx];
   nameEl.textContent = t.name + (scene.selected != null ? " (selected)" : "") + (t.done ? " ✓" : "");
   if (t.has_ref) {
-    img.src = "/api/v1/intrinsic/ref/" + idx + ".jpg?v=" + (t.done ? "1" : "0");
+    img.src = "api/v1/intrinsic/ref/" + idx + ".jpg?v=" + (t.done ? "1" : "0");
     img.hidden = false; hint.hidden = true;
   } else {
     img.hidden = true; hint.hidden = false;
@@ -235,7 +235,7 @@ function initScene() {
   scene.canvas = el("scene");
   if (!scene.canvas) return;
   scene.ctx = scene.canvas.getContext("2d");
-  fetch("/api/v1/intrinsic/targets").then((r) => r.json()).then((d) => {
+  fetch("api/v1/intrinsic/targets").then((r) => r.json()).then((d) => {
     scene.board = d.board;
     if (!scene.targets.length) {
       scene.targets = (d.views || []).map((v) => ({ name: v.name, position: v.position, done: false, has_ref: false }));
@@ -262,7 +262,7 @@ function initScene() {
     scene.selected = best ? best.index : null;
     // In simulation, clicking a sphere flies the camera there (teleport + auto-aim).
     if (best && scene.control) {
-      postJSON("/api/v1/intrinsic/goto", { index: best.index }).then((r) => setStatus(r && r.ok ? "Moved to " + r.name + "." : (r.error || "")));
+      postJSON("api/v1/intrinsic/goto", { index: best.index }).then((r) => setStatus(r && r.ok ? "Moved to " + r.name + "." : (r.error || "")));
     }
     updateRefPanel(); drawScene();
   });

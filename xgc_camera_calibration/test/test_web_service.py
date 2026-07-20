@@ -53,6 +53,15 @@ class FakeSource:
 
 
 class WebCalibrationServiceTest(unittest.TestCase):
+    def test_web_assets_use_proxy_safe_relative_urls(self):
+        web_root = Path(__file__).resolve().parents[1] / "web" / "extrinsic"
+        index = (web_root / "index.html").read_text(encoding="utf-8")
+        app = (web_root / "app.js").read_text(encoding="utf-8")
+        self.assertIn('href="styles.css"', index)
+        self.assertIn('src="app.js"', index)
+        self.assertNotIn('"/api/v1/', app)
+        self.assertNotIn('`/api/v1/', app)
+
     def setUp(self):
         self.world = np.array(
             [

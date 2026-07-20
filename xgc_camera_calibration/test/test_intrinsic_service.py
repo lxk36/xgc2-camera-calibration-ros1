@@ -41,6 +41,13 @@ def make_service(output_file):
 
 
 class IntrinsicServiceTest(unittest.TestCase):
+    def test_web_assets_use_proxy_safe_relative_urls(self):
+        index = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+        app = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
+        self.assertIn('href="styles.css"', index)
+        self.assertIn('src="app.js"', index)
+        self.assertNotIn('"/api/v1/intrinsic/', app)
+
     def test_process_frame_collects_a_board_sample(self):
         with tempfile.TemporaryDirectory() as directory:
             service = make_service(Path(directory) / "intrinsics.yaml")

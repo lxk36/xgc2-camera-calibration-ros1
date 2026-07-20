@@ -174,7 +174,7 @@ async function loadFrame() {
   state.frameLoading = true;
   const image = new Image();
   image.decoding = "async";
-  image.src = `/api/v1/image.jpg?t=${Date.now()}`;
+  image.src = `api/v1/image.jpg?t=${Date.now()}`;
   try {
     await image.decode();
   } catch (_error) {
@@ -227,7 +227,7 @@ async function refreshState() {
   if (state.stateLoading) return;
   state.stateLoading = true;
   try {
-    const serverState = await api("/api/v1/state");
+    const serverState = await api("api/v1/state");
     const needsFrozenFrame = serverState.mode === "frozen" && (
       !state.frameImage ||
       !state.server ||
@@ -249,7 +249,7 @@ async function freezeFrame() {
   clearMessages();
   setBusy(true);
   try {
-    const serverState = await post("/api/v1/freeze");
+    const serverState = await post("api/v1/freeze");
     state.points = [];
     state.projections = [];
     state.restoredResultGeneration = serverState.generation;
@@ -266,7 +266,7 @@ async function liveFrame() {
   clearMessages();
   setBusy(true);
   try {
-    renderState(await post("/api/v1/live"));
+    renderState(await post("api/v1/live"));
     state.points = [];
     state.projections = [];
     state.restoredResultGeneration = null;
@@ -291,7 +291,7 @@ async function solve() {
   clearMessages();
   setBusy(true);
   try {
-    const result = await post("/api/v1/solve", {
+    const result = await post("api/v1/solve", {
       generation: state.server.generation,
       points: state.points.map((point) => ({ marker: point.marker, pixel: point.pixel })),
     });
