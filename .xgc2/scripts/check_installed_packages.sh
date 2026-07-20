@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROS_DISTRO="${ROS_DISTRO:-noetic}"
+PREFIX="/opt/ros/${ROS_DISTRO}"
+PLUGIN="/usr/share/xgc2/process-definitions/xgc2-camera-calibration-ros1.json"
+
+source "${PREFIX}/setup.bash"
+dpkg -s ros-noetic-xgc2-camera-calibration >/dev/null
+test "$(rospack find xgc_camera_calibration)" = "${PREFIX}/share/xgc_camera_calibration"
+test -x "${PREFIX}/lib/xgc_camera_calibration/extrinsic_calibrator_web.py"
+test -x "${PREFIX}/lib/xgc_camera_calibration/intrinsic_calibrator_web.py"
+test -x "${PREFIX}/lib/xgc_camera_calibration/extrinsic_tf_publisher.py"
+for page in extrinsic intrinsic; do
+  test -f "${PREFIX}/share/xgc_camera_calibration/web/${page}/index.html"
+  test -f "${PREFIX}/share/xgc_camera_calibration/web/${page}/app.js"
+  test -f "${PREFIX}/share/xgc_camera_calibration/web/${page}/styles.css"
+done
+test -f "${PLUGIN}"
+python3 -m json.tool "${PLUGIN}" >/dev/null
+python3 -c 'from xgc_camera_calibration.intrinsic_solver import calibrate; from xgc_camera_calibration.solver import solve_extrinsic; from xgc_camera_calibration.transforms import split_parent_to_optical_pose'
+roslaunch --files xgc_camera_calibration extrinsic_calibrator.launch >/dev/null
+roslaunch --files xgc_camera_calibration intrinsic_calibrator.launch >/dev/null
+roslaunch --files xgc_camera_calibration extrinsic_tf.launch >/dev/null
+
+RUNTIME="$(mktemp -d)"
+ROSCORE_PID=""
+EXTRINSIC_PID=""
+INTRINSIC_PID=""
+cleanup() {
+  if [[ -n "${INTRINSIC_PID}" ]]; then kill "${INTRINSIC_PID}" 2>/dev/null || true; fi
+  if [[ -n "${EXTRINSIC_PID}" ]]; then kill "${EXTRINSIC_PID}" 2>/dev/null || true; fi
+  if [[ -n "${ROSCORE_PID}" ]]; then kill "${ROSCORE_PID}" 2>/dev/null || true; fi
+  wait "${INTRINSIC_PID}" 2>/dev/null || true
+  wait "${EXTRINSIC_PID}" 2>/dev/null || true
+  wait "${ROSCORE_PID}" 2>/dev/null || true
+  rm -rf "${RUNTIME}"
+}
+trap cleanup EXIT
+export ROS_MASTER_URI="http://127.0.0.1:11359"
+export ROS_HOME="${RUNTIME}/ros-home"
+export ROS_LOG_DIR="${RUNTIME}/ros-log"
+mkdir -p "${ROS_HOME}" "${ROS_LOG_DIR}"
+roscore -p 11359 >"${RUNTIME}/roscore.log" 2>&1 &
+ROSCORE_PID="$!"
+for _ in $(seq 1 50); do
+  if rosparam list >/dev/null 2>&1; then break; fi
+  sleep 0.1
+done
+rosparam list >/dev/null
+
+"${PREFIX}/lib/xgc_camera_calibration/extrinsic_calibrator_web.py" \
+  __name:=xgc_camera_extrinsic_calibrator_web \
+  _image_topic:=/not_installed_by_this_product/image_raw \
+  _camera_info_topic:=/not_installed_by_this_product/camera_info \
+  _http_port:=18765 _output_file:="${RUNTIME}/extrinsics.yaml" \
+  >"${RUNTIME}/extrinsic.log" 2>&1 &
+EXTRINSIC_PID="$!"
+"${PREFIX}/lib/xgc_camera_calibration/intrinsic_calibrator_web.py" \
+  __name:=xgc_camera_intrinsic_calibrator_web \
+  _image_topic:=/not_installed_by_this_product/image_raw \
+  _camera_info_topic:=/not_installed_by_this_product/camera_info \
+  _http_port:=18766 _output_file:="${RUNTIME}/intrinsics.yaml" \
+  _references_dir:="${RUNTIME}/refs" \
+  >"${RUNTIME}/intrinsic.log" 2>&1 &
+INTRINSIC_PID="$!"
+
+wait_http() {
+  local port="$1" pid="$2"
+  for _ in $(seq 1 100); do
+    if python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${port}/healthz', timeout=1)" >/dev/null 2>&1; then
+      return 0
+    fi
+    if ! kill -0 "${pid}" 2>/dev/null; then return 1; fi
+    sleep 0.1
+  done
+  return 1
+}
+wait_http 18765 "${EXTRINSIC_PID}"
+wait_http 18766 "${INTRINSIC_PID}"
+python3 -c 'import json, urllib.request; p=json.load(urllib.request.urlopen("http://127.0.0.1:18765/healthz")); assert p["status"] == "ok" and not p["image_ready"] and not p["camera_info_ready"]'
+python3 -c 'import json, urllib.request; p=json.load(urllib.request.urlopen("http://127.0.0.1:18766/healthz")); assert p["status"] == "ok" and not p["image_ready"] and not p["camera_control"]'
+python3 -c 'import urllib.request; assert b"Camera extrinsic calibration" in urllib.request.urlopen("http://127.0.0.1:18765/").read()'
+python3 -c 'import urllib.request; assert b"Camera intrinsic calibration" in urllib.request.urlopen("http://127.0.0.1:18766/").read()'
+
+echo "Installed standalone ROS1 camera calibration package passed"

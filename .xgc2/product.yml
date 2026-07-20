@@ -1,0 +1,58 @@
+schema: xgc2.product.v1
+id: xgc2-camera-calibration-ros1
+name: XGC2 ROS1 Camera Calibration
+version: 0.3.0-1
+kind: ros1-apt
+summary: Independent intrinsic and fixed-world-camera extrinsic calibration tools for ROS Noetic.
+ros:
+  distro: noetic
+  workspace: catkin
+  packages:
+  - xgc_camera_calibration
+apt:
+  distribution: focal
+  install:
+  - ros-noetic-xgc2-camera-calibration
+  packages:
+  - ros-noetic-xgc2-camera-calibration
+  package_architectures:
+    ros-noetic-xgc2-camera-calibration:
+    - amd64
+    - arm64
+  depends:
+  - python3-numpy
+  - python3-opencv
+  - python3-rospkg
+  - python3-yaml
+  - ros-noetic-geometry-msgs
+  - ros-noetic-rosbash
+  - ros-noetic-roslaunch
+  - ros-noetic-rospy
+  - ros-noetic-sensor-msgs
+  - ros-noetic-tf2-ros
+usage:
+  install: |
+    sudo apt update
+    sudo apt install ros-noetic-xgc2-camera-calibration
+  smoke_test: |
+    roslaunch --files xgc_camera_calibration intrinsic_calibrator.launch
+    roslaunch --files xgc_camera_calibration extrinsic_calibrator.launch
+    roslaunch --files xgc_camera_calibration extrinsic_tf.launch
+  notes: |
+    Intrinsic calibration is camera-agnostic and can be used for fixed, onboard,
+    or vehicle-mounted cameras. Fixed-camera extrinsic calibration consumes an
+    existing CameraInfo or intrinsic YAML as data; it has no package or release
+    dependency on the intrinsic workflow that may have produced those values.
+ownership:
+  paths:
+  - /opt/ros/noetic/share/xgc_camera_calibration
+  - /opt/ros/noetic/lib/xgc_camera_calibration
+  - /opt/ros/noetic/lib/python3/dist-packages/xgc_camera_calibration
+  - /usr/share/xgc2/process-definitions/xgc2-camera-calibration-ros1.json
+release:
+  repository: lxk36/xgc2-camera-calibration-ros1
+  ref: main
+  workflow: release.yml
+  ci_workflow: ci.yml
+  apt_versions:
+    focal: 0.3.0-1

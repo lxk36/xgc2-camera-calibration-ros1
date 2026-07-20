@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(xgc_camera_calibration VERSION 0.2.0)
+project(xgc_camera_calibration VERSION 0.3.0)
 
 find_package(catkin REQUIRED)
 catkin_python_setup()
@@ -16,6 +16,9 @@ install(DIRECTORY launch
 )
 install(DIRECTORY web
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../process-definitions/xgc2-camera-calibration-ros1.json
+  DESTINATION /usr/share/xgc2/process-definitions
 )
 
 if(CATKIN_ENABLE_TESTING)
