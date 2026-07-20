@@ -18,7 +18,7 @@ for page in extrinsic intrinsic; do
 done
 test -f "${PLUGIN}"
 python3 -m json.tool "${PLUGIN}" >/dev/null
-python3 -c 'from xgc_camera_calibration.intrinsic_solver import calibrate; from xgc_camera_calibration.solver import solve_extrinsic; from xgc_camera_calibration.transforms import split_parent_to_optical_pose'
+python3 -c 'from xgc_camera_calibration.intrinsic_solver import calibrate_intrinsic; from xgc_camera_calibration.solver import solve_extrinsic; from xgc_camera_calibration.transforms import split_parent_to_optical_pose'
 roslaunch --files xgc_camera_calibration extrinsic_calibrator.launch >/dev/null
 roslaunch --files xgc_camera_calibration intrinsic_calibrator.launch >/dev/null
 roslaunch --files xgc_camera_calibration extrinsic_tf.launch >/dev/null
