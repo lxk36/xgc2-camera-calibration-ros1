@@ -56,7 +56,7 @@
     },
     {
       "id": "xgc2-camera-extrinsic-calibrator-ros1",
-      "version": "2.0.0",
+      "version": "2.0.1",
       "label": "XGC2 camera extrinsic calibration WebUI",
       "description": "Serve a local WebUI that matches synchronized pose markers to pixels, solves robust PnP, and persists parent_T_camera_optical.",
       "drivers": ["host"],
@@ -66,7 +66,7 @@
           "cameraInfoTopic": {"type": "string", "default": "/usb_cam/camera_info"},
           "posePrefix": {"type": "string", "default": "/vrpn_client_node"},
           "trackers": {"type": "string", "default": "", "description": "Comma-separated UAV/UGV names allowed as pose markers; empty discovers all markers under posePrefix."},
-          "outputFile": {"type": "string", "default": "/var/lib/xgc2/camera/calibrations/usb_cam/extrinsics.yaml"},
+          "outputFile": {"type": "string", "default": "/tmp/xgc2/camera/calibrations/usb_cam/extrinsics.yaml"},
           "parentFrame": {"type": "string", "default": "map"},
           "opticalFrame": {"type": "string", "default": "usb_cam_optical_frame"},
           "maximumMarkerAge": {"type": "number", "default": 0.1, "minimum": 0.0},
@@ -74,11 +74,11 @@
           "poseHistorySize": {"type": "integer", "default": 240, "minimum": 2, "maximum": 10000},
           "jpegQuality": {"type": "integer", "default": 80, "minimum": 1, "maximum": 100},
           "bindAddress": {"type": "string", "default": "127.0.0.1"},
-          "httpPort": {"type": "integer", "default": 8765, "minimum": 1, "maximum": 65535},
-          "frameAncestors": {"type": "string", "default": "'self' http://127.0.0.1:* http://localhost:*"},
+          "httpPort": {"type": "integer", "default": 18082, "minimum": 1, "maximum": 65535},
+          "frameAncestors": {"type": "string", "default": "'''self'' http://127.0.0.1:* http://localhost:*'"},
           "allowedOrigins": {"type": "string", "default": ""},
           "rosMasterUri": {"type": "string", "default": "http://127.0.0.1:11311"},
-          "rosLogDir": {"type": "string", "default": "/var/lib/xgc2/ros/log/camera-calibration"}
+          "rosLogDir": {"type": "string", "default": "/tmp/xgc2/ros/log/camera-calibration"}
         },
         "additionalProperties": false
       },
