@@ -60,6 +60,33 @@ class ExtrinsicSolverTest(unittest.TestCase):
         with self.assertRaises(CalibrationError):
             solve_extrinsic(world, self.pixels[:5], self.intrinsic)
 
+    def test_recovers_pose_from_planar_robot_rows_and_rejects_outlier(self):
+        world = np.array(
+            [[float(x), -1.0, 0.0] for x in range(5)]
+            + [[float(x), 1.0, 0.0] for x in range(5)],
+            dtype=np.float64,
+        )
+        pixels, _ = cv2.projectPoints(
+            world.reshape(-1, 1, 3), self.rvec, self.tvec, self.intrinsic, np.zeros(5)
+        )
+        observed = pixels.reshape(-1, 2)
+        observed += np.random.RandomState(9).normal(scale=0.1, size=observed.shape)
+        observed[-1] += np.array([45.0, -30.0])
+
+        result = solve_extrinsic(
+            world,
+            observed,
+            self.intrinsic,
+            np.zeros(5),
+            ransac_reprojection_error_px=1.5,
+        )
+
+        expected_rotation, _ = cv2.Rodrigues(self.rvec)
+        expected_translation = -expected_rotation.T.dot(self.tvec)
+        np.testing.assert_allclose(result.translation, expected_translation, atol=0.02)
+        self.assertNotIn(len(world) - 1, result.inlier_indices.tolist())
+        self.assertIn("world points are coplanar; include depth-separated points when possible", result.warnings)
+
     def test_rejects_uncalibrated_intrinsics(self):
         with self.assertRaises(CalibrationError):
             solve_extrinsic(self.world, self.pixels, np.zeros((3, 3)))

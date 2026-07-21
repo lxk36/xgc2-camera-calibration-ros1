@@ -5,10 +5,11 @@ from __future__ import annotations
 import math
 import os
 import tempfile
+from itertools import chain, combinations, islice
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional, Sequence
+from typing import Any, Dict, Iterable, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -93,6 +94,79 @@ def rotation_matrix_to_quaternion(rotation: np.ndarray) -> np.ndarray:
     return quaternion
 
 
+def _planar_pose_ransac(
+    world: np.ndarray,
+    pixels: np.ndarray,
+    intrinsic: np.ndarray,
+    coefficients: np.ndarray,
+    reprojection_error_px: float,
+    iterations: int,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Estimate a planar pose without relying on EPNP's ambiguous coplanar branch."""
+
+    best = None
+    index_sets = chain(
+        (tuple(range(len(world))),),
+        islice(combinations(range(len(world)), 4), int(iterations)),
+    )
+    for indices in index_sets:
+        subset_world = world[list(indices)]
+        singular_values = np.linalg.svd(
+            subset_world - np.mean(subset_world, axis=0), compute_uv=False
+        )
+        scale = max(float(singular_values[0]), 1e-12)
+        if int(np.count_nonzero(singular_values > scale * 1e-6)) < 2:
+            continue
+        try:
+            solved = cv2.solvePnPGeneric(
+                subset_world,
+                pixels[list(indices)],
+                intrinsic,
+                coefficients,
+                flags=cv2.SOLVEPNP_IPPE,
+            )
+        except cv2.error:
+            continue
+        if not solved[0]:
+            continue
+        for rotation_vector, translation_vector in zip(solved[1], solved[2]):
+            if not (
+                np.all(np.isfinite(rotation_vector))
+                and np.all(np.isfinite(translation_vector))
+            ):
+                continue
+            projected, _ = cv2.projectPoints(
+                world.reshape(-1, 1, 3),
+                rotation_vector,
+                translation_vector,
+                intrinsic,
+                coefficients,
+            )
+            errors = np.linalg.norm(projected.reshape(-1, 2) - pixels, axis=1)
+            rotation, _ = cv2.Rodrigues(rotation_vector)
+            depths = (
+                rotation.dot(world.T) + np.asarray(translation_vector).reshape(3, 1)
+            )[2]
+            inliers = np.flatnonzero(
+                (errors <= float(reprojection_error_px)) & (depths > 0.0)
+            )
+            if len(inliers) < 4:
+                continue
+            score = (
+                -len(inliers),
+                float(np.mean(errors[inliers])),
+                float(np.max(errors[inliers])),
+            )
+            if best is None or score < best[0]:
+                best = (score, rotation_vector, translation_vector, inliers)
+    if best is None:
+        raise CalibrationError(
+            "planar robot layout is degenerate; select at least two well-separated "
+            "markers from both the UAV and UGV rows"
+        )
+    return best[1], best[2], np.asarray(best[3], dtype=np.int32)
+
+
 def solve_extrinsic(
     world_points: Iterable[Iterable[float]],
     image_points: Iterable[Iterable[float]],
@@ -134,19 +208,29 @@ def solve_extrinsic(
     if rank == 2:
         warnings.append("world points are coplanar; include depth-separated points when possible")
 
-    ok, rvec, tvec, inliers = cv2.solvePnPRansac(
-        world.reshape(-1, 1, 3),
-        pixels.reshape(-1, 1, 2),
-        intrinsic,
-        coefficients,
-        iterationsCount=int(ransac_iterations),
-        reprojectionError=float(ransac_reprojection_error_px),
-        confidence=float(confidence),
-        flags=cv2.SOLVEPNP_EPNP,
-    )
-    if not ok or inliers is None or len(inliers) < 4:
-        raise CalibrationError("solvePnPRansac could not find at least four inliers")
-    inlier_indices = np.asarray(inliers, dtype=np.int32).reshape(-1)
+    if rank == 2:
+        rvec, tvec, inlier_indices = _planar_pose_ransac(
+            world,
+            pixels,
+            intrinsic,
+            coefficients,
+            ransac_reprojection_error_px,
+            ransac_iterations,
+        )
+    else:
+        ok, rvec, tvec, inliers = cv2.solvePnPRansac(
+            world.reshape(-1, 1, 3),
+            pixels.reshape(-1, 1, 2),
+            intrinsic,
+            coefficients,
+            iterationsCount=int(ransac_iterations),
+            reprojectionError=float(ransac_reprojection_error_px),
+            confidence=float(confidence),
+            flags=cv2.SOLVEPNP_EPNP,
+        )
+        if not ok or inliers is None or len(inliers) < 4:
+            raise CalibrationError("solvePnPRansac could not find at least four inliers")
+        inlier_indices = np.asarray(inliers, dtype=np.int32).reshape(-1)
     inlier_world = world[inlier_indices].reshape(-1, 1, 3)
     inlier_pixels = pixels[inlier_indices].reshape(-1, 1, 2)
 
