@@ -3,7 +3,7 @@
   "definitions": [
     {
       "id": "xgc2-camera-intrinsic-calibrator-ros1",
-      "version": "2.1.0",
+      "version": "2.0.0",
       "label": "XGC2 camera intrinsic calibration WebUI",
       "description": "Serve a local WebUI with a 3D sample guide and X/Y/Size/Skew coverage: auto-collect diverse chessboard views, solve intrinsics (cv2-direct), and persist camera_matrix + distortion.",
       "drivers": ["host"],
