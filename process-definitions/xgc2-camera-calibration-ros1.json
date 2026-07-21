@@ -3,7 +3,7 @@
   "definitions": [
     {
       "id": "xgc2-camera-intrinsic-calibrator-ros1",
-      "version": "2.0.0",
+      "version": "2.1.0",
       "label": "XGC2 camera intrinsic calibration WebUI",
       "description": "Serve a local WebUI with a 3D sample guide and X/Y/Size/Skew coverage: auto-collect diverse chessboard views, solve intrinsics (cv2-direct), and persist camera_matrix + distortion.",
       "drivers": ["host"],
@@ -65,6 +65,7 @@
           "imageTopic": {"type": "string", "default": "/usb_cam/image_raw"},
           "cameraInfoTopic": {"type": "string", "default": "/usb_cam/camera_info"},
           "posePrefix": {"type": "string", "default": "/vrpn_client_node"},
+          "trackers": {"type": "string", "default": "", "description": "Comma-separated UAV/UGV names allowed as pose markers; empty discovers all markers under posePrefix."},
           "outputFile": {"type": "string", "default": "/var/lib/xgc2/camera/calibrations/usb_cam/extrinsics.yaml"},
           "parentFrame": {"type": "string", "default": "map"},
           "opticalFrame": {"type": "string", "default": "usb_cam_optical_frame"},
@@ -81,9 +82,30 @@
         },
         "additionalProperties": false
       },
+      "resourceClaims": [
+        {
+          "bindingKey": "http",
+          "kind": "tcp-listener",
+          "mode": "",
+          "capacity": 0,
+          "address": "127.0.0.1",
+          "portParameter": "httpPort"
+        },
+        {
+          "bindingKey": "ros-node",
+          "kind": "custom",
+          "mode": "",
+          "capacity": 0,
+          "namespace": "ros1-node",
+          "identityParts": [
+            {"parameter": "rosMasterUri"},
+            {"literal": "/xgc_camera_extrinsic_calibrator_web"}
+          ]
+        }
+      ],
       "command": {
         "executable": "/opt/ros/noetic/lib/xgc_camera_calibration/extrinsic_calibrator_web.py",
-        "args": ["__name:=xgc_camera_extrinsic_calibrator_web", "_image_topic:=${imageTopic}", "_camera_info_topic:=${cameraInfoTopic}", "_pose_prefix:=${posePrefix}", "_output_file:=${outputFile}", "_parent_frame:=${parentFrame}", "_child_frame:=${opticalFrame}", "_maximum_marker_age:=${maximumMarkerAge}", "_maximum_inlier_error_px:=${maximumErrorPx}", "_pose_history_size:=${poseHistorySize}", "_jpeg_quality:=${jpegQuality}", "_bind_address:=${bindAddress}", "_http_port:=${httpPort}", "_frame_ancestors:=${frameAncestors}", "_allowed_origins:=${allowedOrigins}"],
+        "args": ["__name:=xgc_camera_extrinsic_calibrator_web", "_image_topic:=${imageTopic}", "_camera_info_topic:=${cameraInfoTopic}", "_pose_prefix:=${posePrefix}", "_trackers:=${trackers}", "_output_file:=${outputFile}", "_parent_frame:=${parentFrame}", "_child_frame:=${opticalFrame}", "_maximum_marker_age:=${maximumMarkerAge}", "_maximum_inlier_error_px:=${maximumErrorPx}", "_pose_history_size:=${poseHistorySize}", "_jpeg_quality:=${jpegQuality}", "_bind_address:=${bindAddress}", "_http_port:=${httpPort}", "_frame_ancestors:=${frameAncestors}", "_allowed_origins:=${allowedOrigins}"],
         "env": {
           "ROS_MASTER_URI": "${rosMasterUri}",
           "ROS_LOG_DIR": "${rosLogDir}",
