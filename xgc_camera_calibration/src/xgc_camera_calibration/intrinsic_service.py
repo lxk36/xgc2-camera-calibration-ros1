@@ -287,6 +287,10 @@ class IntrinsicCalibrationService:
                 ),
                 details={"action": dict(self.action)},
             )
+        # A failed background action remains visible until the operator makes
+        # the next deliberate mutation, which also acknowledges the failure.
+        if self.action is not None and self.action.get("status") == "failed":
+            self.action = None
 
     def _clear_session_locked(self) -> None:
         self.samples = []
@@ -307,14 +311,18 @@ class IntrinsicCalibrationService:
             if not 0 <= index < len(self.views):
                 raise ApiError(HTTPStatus.UNPROCESSABLE_ENTITY, "Unknown target index")
             view = self.views[index]
-        camera.goto(view["position"], view["yaw_offset"], view["pitch_offset"], view["roll"])
+            # Keep admission and the short camera command atomic with respect
+            # to an auto-run starting on another HTTP worker thread.
+            camera.goto(
+                view["position"], view["yaw_offset"], view["pitch_offset"], view["roll"]
+            )
         return {"ok": True, "name": view["name"]}
 
     def reset_pose(self) -> Dict[str, Any]:
         with self.lock:
             self._require_idle_locked()
             camera = self._require_camera()
-        camera.reset()
+            camera.reset()
         return {"ok": True}
 
     def auto_run(self, settle: float = 1.3) -> Dict[str, Any]:
@@ -345,7 +353,22 @@ class IntrinsicCalibrationService:
             )
             self._auto_run_thread = thread
             accepted = {"accepted": True, "action": dict(self.action)}
-        thread.start()
+        try:
+            thread.start()
+        except RuntimeError as error:
+            with self.lock:
+                self.action = {
+                    "name": "auto_run",
+                    "status": "failed",
+                    "target_index": None,
+                    "target_name": None,
+                    "error": str(error) or "Could not start the automatic coverage sweep",
+                }
+                self._auto_run_thread = None
+            raise ApiError(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                "Could not start the automatic coverage sweep",
+            ) from error
         return accepted
 
     def _run_auto_sweep(self, camera: Any, settle: float) -> None:

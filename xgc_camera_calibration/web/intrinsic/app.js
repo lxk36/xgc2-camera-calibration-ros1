@@ -66,17 +66,26 @@ function renderPose(pose) {
 }
 
 function applyState(s) {
+  const wasAutoRunning = autoRunning;
+  const action = s.action || null;
+  autoRunning = !!(action && action.name === "auto_run" && action.status === "running");
+  if (action && action.status === "failed") {
+    setStatus("Auto-run failed: " + (action.error || "camera control failed"));
+  } else if (wasAutoRunning && !autoRunning) {
+    setStatus(`Auto-run done — ${s.samples} samples. Press Calibrate.`);
+  }
   el("conn").textContent = "connected";
   el("conn").className = "pill pill-on";
   el("samples").textContent = `${s.samples} samples`;
   renderBars(s.coverage || []);
 
-  el("btn-calibrate").disabled = !(s.goodenough && !s.calibrated);
+  el("btn-calibrate").disabled = autoRunning || !(s.goodenough && !s.calibrated);
+  el("btn-reset").disabled = autoRunning;
   renderResult(s.result);
   renderPose(s.pose);
 
   scene.control = !!s.camera_control;
-  el("btn-reset-pose").disabled = !scene.control;
+  el("btn-reset-pose").disabled = !scene.control || autoRunning;
   el("btn-auto").disabled = !scene.control || autoRunning;
   scene.cam = s.pose || null;
   if (s.targets) scene.targets = s.targets;
@@ -119,8 +128,13 @@ function wireButtons() {
     autoRunning = true; el("btn-auto").disabled = true;
     setStatus("Auto-run: sweeping every pose…");
     const r = await postJSON("api/v1/intrinsic/auto_run");
-    autoRunning = false;
-    setStatus(r && r.ok ? `Auto-run done — ${r.samples} samples. Press Calibrate.` : (r.error || "Auto-run failed."));
+    if (r && r.accepted) {
+      autoRunning = true;
+      setStatus("Auto-run accepted: sweeping every pose…");
+    } else {
+      autoRunning = false;
+      setStatus(r && r.ok ? `Auto-run done — ${r.samples} samples. Press Calibrate.` : (r.error || "Auto-run failed."));
+    }
     poll();
   });
 }
@@ -261,7 +275,7 @@ function initScene() {
     for (const m of scene.markers) { const d = Math.hypot(m.x - mx, m.y - my); if (d < bestDist) { bestDist = d; best = m; } }
     scene.selected = best ? best.index : null;
     // In simulation, clicking a sphere flies the camera there (teleport + auto-aim).
-    if (best && scene.control) {
+    if (best && scene.control && !autoRunning) {
       postJSON("api/v1/intrinsic/goto", { index: best.index }).then((r) => setStatus(r && r.ok ? "Moved to " + r.name + "." : (r.error || "")));
     }
     updateRefPanel(); drawScene();

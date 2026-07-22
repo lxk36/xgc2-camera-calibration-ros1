@@ -9,6 +9,7 @@ import urllib.request
 from http import HTTPStatus
 from pathlib import Path
 from time import monotonic, sleep
+from unittest.mock import patch
 
 import cv2
 import numpy as np
@@ -69,6 +70,8 @@ class IntrinsicServiceTest(unittest.TestCase):
         self.assertIn('href="styles.css"', index)
         self.assertIn('src="app.js"', index)
         self.assertNotIn('"/api/v1/intrinsic/', app)
+        self.assertIn("r && r.accepted", app)
+        self.assertIn("s.action || null", app)
 
     def test_process_frame_collects_a_board_sample(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -133,9 +136,17 @@ class IntrinsicServiceTest(unittest.TestCase):
             self.assertLess(monotonic() - started, 0.1)
             self.assertTrue(accepted["accepted"])
             self.assertEqual(accepted["action"]["status"], "running")
-            with self.assertRaises(ApiError) as caught:
-                service.reset()
-            self.assertEqual(caught.exception.status, int(HTTPStatus.CONFLICT))
+            for mutation in (
+                service.reset,
+                service.reset_pose,
+                service.calibrate,
+                lambda: service.goto(0),
+                lambda: service.auto_run(settle=0.01),
+            ):
+                with self.assertRaises(ApiError) as caught:
+                    mutation()
+                self.assertEqual(caught.exception.status, int(HTTPStatus.CONFLICT))
+                self.assertIn("already running", caught.exception.message)
 
             deadline = monotonic() + 2.0
             while service.state()["action"] is not None and monotonic() < deadline:
@@ -143,6 +154,37 @@ class IntrinsicServiceTest(unittest.TestCase):
             self.assertIsNone(service.state()["action"])
             self.assertEqual(len(camera.positions), 10)
             self.assertEqual(service.reset()["samples"], 0)
+
+    def test_auto_run_camera_failure_is_reported_and_recoverable(self):
+        class FailingCameraControl(FakeCameraControl):
+            def goto(self, position, yaw_offset, pitch_offset, roll):
+                raise RuntimeError("Gazebo camera rejected the pose")
+
+        with tempfile.TemporaryDirectory() as directory:
+            service = make_service(Path(directory) / "intrinsics.yaml")
+            service.attach_camera_control(FailingCameraControl())
+            service.auto_run(settle=0)
+            deadline = monotonic() + 1.0
+            while service.state()["action"]["status"] == "running" and monotonic() < deadline:
+                sleep(0.01)
+            action = service.state()["action"]
+            self.assertEqual(action["status"], "failed")
+            self.assertIn("rejected the pose", action["error"])
+            self.assertEqual(service.reset()["samples"], 0)
+            self.assertIsNone(service.state()["action"])
+
+    def test_auto_run_thread_start_failure_does_not_leave_permanent_busy_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = make_service(Path(directory) / "intrinsics.yaml")
+            service.attach_camera_control(FakeCameraControl())
+            with patch("xgc_camera_calibration.intrinsic_service.threading.Thread") as constructor:
+                constructor.return_value.start.side_effect = RuntimeError("thread unavailable")
+                with self.assertRaises(ApiError) as caught:
+                    service.auto_run()
+            self.assertEqual(caught.exception.status, int(HTTPStatus.INTERNAL_SERVER_ERROR))
+            self.assertEqual(service.state()["action"]["status"], "failed")
+            self.assertEqual(service.reset()["samples"], 0)
+            self.assertIsNone(service.state()["action"])
 
     def test_transport_routes_intrinsic_and_gates_when_absent(self):
         with tempfile.TemporaryDirectory() as directory:
