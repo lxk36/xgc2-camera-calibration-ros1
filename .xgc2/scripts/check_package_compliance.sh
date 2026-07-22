@@ -157,8 +157,8 @@ assert deb["size"] > 0
 PY
 
 grep -q '^id: xgc2-camera-calibration-ros1$' .xgc2/product.yml
-grep -q '^version: 0.3.0-6$' .xgc2/product.yml
-grep -q '^    focal: 0.3.0-6$' .xgc2/product.yml
+grep -q '^version: 0.3.0-7$' .xgc2/product.yml
+grep -q '^    focal: 0.3.0-7$' .xgc2/product.yml
 if grep -q '^    focal: .*~focal' .xgc2/product.yml; then
   echo "single-distribution ROS1 package version must not retain a focal suffix" >&2
   exit 1
@@ -166,6 +166,12 @@ fi
 grep -q '/usr/share/xgc2/process-definitions' xgc_camera_calibration/CMakeLists.txt
 grep -q '/workspace/repo/process-definitions/' .xgc2/scripts/build_debs_in_docker.sh
 grep -q '/workspace/work/src/process-definitions/' .xgc2/scripts/build_debs_in_docker.sh
+grep -q '<exec_depend>gazebo_msgs</exec_depend>' xgc_camera_calibration/package.xml
+grep -q '<exec_depend>tf</exec_depend>' xgc_camera_calibration/package.xml
+grep -q 'ros-noetic-gazebo-msgs' .xgc2/product.yml
+grep -q 'ros-noetic-tf$' .xgc2/product.yml
+grep -q 'ros-noetic-gazebo-msgs.*ros-noetic-geometry-msgs' .xgc2/scripts/package_debs.sh
+grep -q 'ros-noetic-sensor-msgs.*ros-noetic-tf,.*ros-noetic-tf2-ros' .xgc2/scripts/package_debs.sh
 for page in extrinsic intrinsic; do
   test -f "xgc_camera_calibration/web/${page}/index.html"
   test -f "xgc_camera_calibration/web/${page}/app.js"

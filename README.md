@@ -26,6 +26,13 @@ Open `http://127.0.0.1:8766/`. The optional `camera_control:=true` adapter can
 move a named Gazebo camera through the sample guide, but simulation control is
 not required by the intrinsic algorithm.
 
+The product-facing intrinsic service is available under
+`/api/v1/intrinsic/`: `state`, `image.jpg`, `targets`, and `ref/<index>.jpg`
+are read endpoints; `goto`, `reset_pose`, `auto_run`, `calibrate`, and `reset`
+are JSON actions. `auto_run` returns HTTP 202 immediately and exposes its
+authoritative progress in `state.action`. Conflicting mutation requests return
+HTTP 409 until the sweep finishes; the OpenCV solver itself remains unchanged.
+
 ### Fixed-world-camera extrinsic calibration
 
 The extrinsic calibrator is for a camera fixed in an experiment site's world
@@ -85,15 +92,16 @@ from both `libxgc2-camera-dev` and `ros-noetic-xgc-camera-driver`.
 ## Automation
 
 `/usr/share/xgc2/process-definitions/xgc2-camera-calibration-ros1.json`
-registers three independent process definitions:
+registers three independent process-definition IDs:
 
 - `xgc2-camera-intrinsic-calibrator-ros1`
 - `xgc2-camera-extrinsic-calibrator-ros1`
 - `xgc2-camera-extrinsic-tf-ros1`
 
 Both WebUIs bind to loopback by default and require no desktop session or
-`DISPLAY`. Runtime calibration assets are written outside the package share
-directory under `/var/lib/xgc2/camera/calibrations` by default.
+`DISPLAY`. Current managed definitions write runtime calibration assets
+outside the package share directory under `/tmp/xgc2/camera/calibrations`;
+legacy definitions retain their original `/var/lib/xgc2` defaults.
 
 ## Build and test
 

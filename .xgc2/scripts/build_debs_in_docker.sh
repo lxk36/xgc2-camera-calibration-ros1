@@ -40,9 +40,9 @@ docker run --rm \
     apt-get install -y --no-install-recommends \
       build-essential cmake dpkg-dev fakeroot git pkg-config rsync \
       python3-nose python3-numpy python3-opencv python3-rospkg python3-yaml \
-      ros-noetic-geometry-msgs \
+      ros-noetic-gazebo-msgs ros-noetic-geometry-msgs \
       ros-noetic-rosbash ros-noetic-roslaunch ros-noetic-rospack ros-noetic-rospy ros-noetic-rostest \
-      ros-noetic-sensor-msgs ros-noetic-tf2-ros
+      ros-noetic-sensor-msgs ros-noetic-tf ros-noetic-tf2-ros
     rm -rf /workspace/work/src /workspace/work/build /workspace/work/devel /workspace/work/install-root
     mkdir -p \
       /workspace/work/src/xgc_camera_calibration \
