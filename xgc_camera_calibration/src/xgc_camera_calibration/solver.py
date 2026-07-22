@@ -117,6 +117,7 @@ def _planar_pose_ransac(
         scale = max(float(singular_values[0]), 1e-12)
         if int(np.count_nonzero(singular_values > scale * 1e-6)) < 2:
             continue
+        candidates = []
         try:
             solved = cv2.solvePnPGeneric(
                 subset_world,
@@ -125,11 +126,26 @@ def _planar_pose_ransac(
                 coefficients,
                 flags=cv2.SOLVEPNP_IPPE,
             )
+            if solved[0]:
+                candidates.extend(zip(solved[1], solved[2]))
         except cv2.error:
-            continue
-        if not solved[0]:
-            continue
-        for rotation_vector, translation_vector in zip(solved[1], solved[2]):
+            pass
+        # OpenCV 4.2 can return no IPPE candidates for a valid noisy planar
+        # subset. Its iterative planar initializer uses the same homography
+        # geometry and is stable across the Focal/Noetic ABI.
+        try:
+            ok, rotation_vector, translation_vector = cv2.solvePnP(
+                subset_world,
+                pixels[list(indices)],
+                intrinsic,
+                coefficients,
+                flags=cv2.SOLVEPNP_ITERATIVE,
+            )
+            if ok:
+                candidates.append((rotation_vector, translation_vector))
+        except cv2.error:
+            pass
+        for rotation_vector, translation_vector in candidates:
             if not (
                 np.all(np.isfinite(rotation_vector))
                 and np.all(np.isfinite(translation_vector))
