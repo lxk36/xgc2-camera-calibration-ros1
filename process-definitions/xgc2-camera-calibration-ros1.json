@@ -130,7 +130,7 @@
         "interval": 1000000000,
         "timeout": 1000000000,
         "successThreshold": 1,
-        "failureThreshold": 3
+        "failureThreshold": 30
       },
       "liveness": {"kind": "process"},
       "stop": {"gracePeriod": 5000000000},

@@ -130,6 +130,7 @@ assert intrinsic_claims["ros-node"]["identityParts"] == [
 assert intrinsic["readiness"]["kind"] == "tcp"
 assert intrinsic["readiness"]["address"] == "127.0.0.1:${httpPort}"
 assert intrinsic["readiness"]["successThreshold"] == 1
+assert intrinsic["readiness"]["failureThreshold"] == 30
 
 manifest_paths = list(
     (pathlib.Path(os.environ["MANIFEST_TEST_ROOT"]) / "manifests").glob("*.json")
