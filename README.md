@@ -52,6 +52,19 @@ roslaunch xgc_camera_calibration extrinsic_tf.launch \
   extrinsic_file:=/var/lib/xgc2/camera/calibrations/usb_cam/extrinsics.yaml
 ```
 
+An Automation can start the publisher before the operator solves the camera and
+activate the new result without restarting any process:
+
+```bash
+roslaunch xgc_camera_calibration extrinsic_tf.launch \
+  extrinsic_file:=/tmp/xgc2/camera/calibrations/usb_cam/extrinsics.yaml \
+  wait_for_file:=true require_file_update:=true watch_file:=true
+```
+
+`require_file_update` ignores a stale file that existed when the node started;
+the calibrator's atomic save then activates exactly the result from the current
+run. `watch_file` also applies later re-solves while the workflow remains open.
+
 The stable REP-103 chain is:
 
 ```text

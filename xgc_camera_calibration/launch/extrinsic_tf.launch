@@ -5,6 +5,10 @@
   <arg name="optical_frame" default="usb_cam_optical_frame" />
   <arg name="static" default="true" />
   <arg name="publish_rate" default="10.0" />
+  <arg name="wait_for_file" default="false" />
+  <arg name="require_file_update" default="false" />
+  <arg name="watch_file" default="false" />
+  <arg name="file_poll_rate" default="5.0" />
 
   <node pkg="xgc_camera_calibration"
         type="extrinsic_tf_publisher.py"
@@ -16,5 +20,9 @@
     <param name="optical_frame" value="$(arg optical_frame)" />
     <param name="static" value="$(arg static)" />
     <param name="publish_rate" value="$(arg publish_rate)" />
+    <param name="wait_for_file" value="$(arg wait_for_file)" />
+    <param name="require_file_update" value="$(arg require_file_update)" />
+    <param name="watch_file" value="$(arg watch_file)" />
+    <param name="file_poll_rate" value="$(arg file_poll_rate)" />
   </node>
 </launch>

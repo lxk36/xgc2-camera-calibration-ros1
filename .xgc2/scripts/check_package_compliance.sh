@@ -65,7 +65,7 @@ assert plugin["apiVersion"] == "xgc.execution.process/v1"
 definitions = plugin["definitions"]
 keys = [(definition["id"], definition["version"]) for definition in definitions]
 ids = {definition["id"] for definition in definitions}
-assert len(keys) == len(set(keys)) == 5
+assert len(keys) == len(set(keys)) == 6
 assert len(ids) == 3
 assert "xgc2-camera-v4l2-ros1" not in ids
 intrinsic = next(
@@ -78,6 +78,15 @@ extrinsic_versions = {
 }
 assert set(extrinsic_versions) == {"2.0.0", "2.0.1", "2.0.2"}
 extrinsic = extrinsic_versions["2.0.2"]
+tf_versions = {
+    item["version"]: item for item in definitions
+    if item["id"] == "xgc2-camera-extrinsic-tf-ros1"
+}
+assert set(tf_versions) == {"1.0.0", "1.1.0"}
+tf_publisher = tf_versions["1.1.0"]
+assert tf_publisher["parameters"]["properties"]["waitForFile"]["default"] is False
+assert tf_publisher["parameters"]["properties"]["watchFile"]["default"] is False
+assert "_require_file_update:=${requireFileUpdate}" in tf_publisher["command"]["args"]
 assert extrinsic["command"]["executable"] == (
     "/opt/ros/noetic/lib/xgc_camera_calibration/extrinsic_calibrator_web.py"
 )
