@@ -65,13 +65,16 @@ assert plugin["apiVersion"] == "xgc.execution.process/v1"
 definitions = plugin["definitions"]
 keys = [(definition["id"], definition["version"]) for definition in definitions]
 ids = {definition["id"] for definition in definitions}
-assert len(keys) == len(set(keys)) == 6
+assert len(keys) == len(set(keys)) == 7
 assert len(ids) == 3
 assert "xgc2-camera-v4l2-ros1" not in ids
-intrinsic = next(
-    item for item in definitions
+intrinsic_versions = {
+    item["version"]: item for item in definitions
     if item["id"] == "xgc2-camera-intrinsic-calibrator-ros1"
-)
+}
+assert set(intrinsic_versions) == {"2.0.0", "2.1.0"}
+intrinsic_legacy = intrinsic_versions["2.0.0"]
+intrinsic = intrinsic_versions["2.1.0"]
 extrinsic_versions = {
     item["version"]: item for item in definitions
     if item["id"] == "xgc2-camera-extrinsic-calibrator-ros1"
@@ -93,13 +96,40 @@ assert extrinsic["command"]["executable"] == (
 assert extrinsic["parameters"]["properties"]["bindAddress"]["default"] == "127.0.0.1"
 assert extrinsic["parameters"]["properties"]["httpPort"]["default"] == 18082
 assert "DISPLAY" not in extrinsic["command"]["env"]
-assert intrinsic["version"] == "2.0.0"
+assert intrinsic_legacy["parameters"]["properties"]["httpPort"]["default"] == 8766
+assert intrinsic_legacy["parameters"]["properties"]["outputFile"]["default"] == (
+    "/var/lib/xgc2/camera/calibrations/usb_cam/intrinsics.yaml"
+)
 assert intrinsic["command"]["executable"] == (
     "/opt/ros/noetic/lib/xgc_camera_calibration/intrinsic_calibrator_web.py"
 )
-assert intrinsic["parameters"]["properties"]["httpPort"]["default"] == 8766
+intrinsic_properties = intrinsic["parameters"]["properties"]
+assert intrinsic_properties["httpPort"]["default"] == 18083
+assert intrinsic_properties["outputFile"]["default"] == (
+    "/tmp/xgc2/camera/calibrations/usb_cam/intrinsics.yaml"
+)
+assert intrinsic_properties["referencesDir"]["default"] == (
+    "/tmp/xgc2/camera/calibrations/usb_cam/intrinsic_refs"
+)
+assert intrinsic_properties["rosLogDir"]["default"] == (
+    "/tmp/xgc2/ros/log/camera-calibration"
+)
 assert intrinsic["parameters"]["properties"]["cameraControl"]["default"] is False
 assert "DISPLAY" not in intrinsic["command"]["env"]
+intrinsic_claims = {
+    claim["bindingKey"]: claim for claim in intrinsic["resourceClaims"]
+}
+assert intrinsic_claims["http"]["kind"] == "tcp-listener"
+assert intrinsic_claims["http"]["address"] == "127.0.0.1"
+assert intrinsic_claims["http"]["portParameter"] == "httpPort"
+assert intrinsic_claims["ros-node"]["namespace"] == "ros1-node"
+assert intrinsic_claims["ros-node"]["identityParts"] == [
+    {"parameter": "rosMasterUri"},
+    {"literal": "/xgc_camera_intrinsic_calibrator_web"},
+]
+assert intrinsic["readiness"]["kind"] == "tcp"
+assert intrinsic["readiness"]["address"] == "127.0.0.1:${httpPort}"
+assert intrinsic["readiness"]["successThreshold"] == 1
 
 manifest_paths = list(
     (pathlib.Path(os.environ["MANIFEST_TEST_ROOT"]) / "manifests").glob("*.json")

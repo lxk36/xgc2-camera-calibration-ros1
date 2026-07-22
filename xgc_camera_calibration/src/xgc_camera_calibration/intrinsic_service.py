@@ -121,6 +121,8 @@ class IntrinsicCalibrationService:
         self.align_threshold = float(align_threshold)
         self.camera: Optional[Any] = None
         self._recording = False
+        self.action: Optional[Dict[str, Any]] = None
+        self._auto_run_thread: Optional[threading.Thread] = None
         self._load_refs()
 
     # -- guide wiring ---------------------------------------------------------
@@ -272,45 +274,115 @@ class IntrinsicCalibrationService:
                 "next": next_index,
                 "pose": pose,
                 "camera_control": self.camera is not None,
+                "action": dict(self.action) if self.action is not None else None,
             }
 
     # -- sim camera guidance actions -----------------------------------------
+    def _require_idle_locked(self) -> None:
+        if self.action is not None and self.action.get("status") == "running":
+            raise ApiError(
+                HTTPStatus.CONFLICT,
+                "Intrinsic calibration action '{}' is already running".format(
+                    self.action.get("name", "unknown")
+                ),
+                details={"action": dict(self.action)},
+            )
+
+    def _clear_session_locked(self) -> None:
+        self.samples = []
+        self.image_points = []
+        self.result = None
+        self.result_payload = None
+        self.target_done = [False] * len(self.views)
+
     def _require_camera(self) -> Any:
         if self.camera is None:
             raise ApiError(HTTPStatus.NOT_FOUND, "No camera control is available")
         return self.camera
 
     def goto(self, index: int) -> Dict[str, Any]:
-        camera = self._require_camera()
-        if not 0 <= index < len(self.views):
-            raise ApiError(HTTPStatus.UNPROCESSABLE_ENTITY, "Unknown target index")
-        view = self.views[index]
+        with self.lock:
+            self._require_idle_locked()
+            camera = self._require_camera()
+            if not 0 <= index < len(self.views):
+                raise ApiError(HTTPStatus.UNPROCESSABLE_ENTITY, "Unknown target index")
+            view = self.views[index]
         camera.goto(view["position"], view["yaw_offset"], view["pitch_offset"], view["roll"])
         return {"ok": True, "name": view["name"]}
 
     def reset_pose(self) -> Dict[str, Any]:
-        self._require_camera().reset()
+        with self.lock:
+            self._require_idle_locked()
+            camera = self._require_camera()
+        camera.reset()
         return {"ok": True}
 
     def auto_run(self, settle: float = 1.3) -> Dict[str, Any]:
-        """Reset, then fly through every view hands-free so the feeder collects a
-        full sample set (spheres green as it goes).  The operator then calibrates.
+        """Start a background sweep through every recommended sample view.
+
+        The HTTP transport must remain responsive while the camera dwells at
+        each pose.  State polling exposes the authoritative in-flight action;
+        mutating operator actions are rejected until the sweep finishes.
         """
-        camera = self._require_camera()
-        self.reset()
-        for view in self.views:
-            camera.goto(view["position"], view["yaw_offset"], view["pitch_offset"], view["roll"])
-            time.sleep(settle)
+        if float(settle) < 0.0:
+            raise ValueError("settle must be non-negative")
         with self.lock:
-            return {"ok": True, "samples": len(self.samples)}
+            self._require_idle_locked()
+            camera = self._require_camera()
+            self._clear_session_locked()
+            self.action = {
+                "name": "auto_run",
+                "status": "running",
+                "target_index": None,
+                "target_name": None,
+                "error": None,
+            }
+            thread = threading.Thread(
+                target=self._run_auto_sweep,
+                args=(camera, float(settle)),
+                name="intrinsic-auto-run",
+                daemon=True,
+            )
+            self._auto_run_thread = thread
+            accepted = {"accepted": True, "action": dict(self.action)}
+        thread.start()
+        return accepted
+
+    def _run_auto_sweep(self, camera: Any, settle: float) -> None:
+        try:
+            for index, view in enumerate(self.views):
+                with self.lock:
+                    if self.action is None or self.action.get("status") != "running":
+                        return
+                    self.action["target_index"] = index
+                    self.action["target_name"] = view["name"]
+                camera.goto(
+                    view["position"], view["yaw_offset"], view["pitch_offset"], view["roll"]
+                )
+                time.sleep(settle)
+        except Exception as error:  # Camera-control failures are reported through state.
+            with self.lock:
+                self.action = {
+                    "name": "auto_run",
+                    "status": "failed",
+                    "target_index": self.action.get("target_index") if self.action else None,
+                    "target_name": self.action.get("target_name") if self.action else None,
+                    "error": str(error) or error.__class__.__name__,
+                }
+                self._auto_run_thread = None
+            return
+        with self.lock:
+            self.action = None
+            self._auto_run_thread = None
 
     def record_references(self, settle: float = 1.3) -> Dict[str, Any]:
         """One-off: fly to every view, snapshot the annotated frame as its
         reference image, then start fresh so the operator still calibrates
         manually with all spheres grey.
         """
-        camera = self._require_camera()
         with self.lock:
+            self._require_idle_locked()
+            camera = self._require_camera()
             self._recording = True
         saved = 0
         try:
@@ -334,6 +406,7 @@ class IntrinsicCalibrationService:
 
     def calibrate(self) -> Dict[str, Any]:
         with self.lock:
+            self._require_idle_locked()
             if self.result is not None:
                 return self.result_payload  # type: ignore[return-value]
             if not self.image_points or self.image_size is None:
@@ -376,9 +449,7 @@ class IntrinsicCalibrationService:
 
     def reset(self) -> Dict[str, Any]:
         with self.lock:
-            self.samples = []
-            self.image_points = []
-            self.result = None
-            self.result_payload = None
-            self.target_done = [False] * len(self.views)
+            self._require_idle_locked()
+            self._clear_session_locked()
+            self.action = None
         return self.state()

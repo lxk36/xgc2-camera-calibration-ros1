@@ -640,7 +640,7 @@ class CalibrationRequestHandler(BaseHTTPRequestHandler):
             if path == "/api/v1/intrinsic/auto_run":
                 if request not in ({}, None):
                     raise ApiError(HTTPStatus.BAD_REQUEST, "auto_run request must be an empty object")
-                self._send_json(HTTPStatus.OK, self._intrinsic().auto_run())
+                self._send_json(HTTPStatus.ACCEPTED, self._intrinsic().auto_run())
                 return
             raise ApiError(HTTPStatus.NOT_FOUND, "Route not found")
         raise ApiError(HTTPStatus.METHOD_NOT_ALLOWED, "Method not allowed")

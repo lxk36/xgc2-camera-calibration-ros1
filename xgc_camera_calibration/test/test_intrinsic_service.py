@@ -8,6 +8,7 @@ import urllib.error
 import urllib.request
 from http import HTTPStatus
 from pathlib import Path
+from time import monotonic, sleep
 
 import cv2
 import numpy as np
@@ -38,6 +39,27 @@ def make_service(output_file):
         board_size=(7, 5), square=0.20, output_file=str(output_file),
         image_topic="/usb_cam/image_raw", display_width=640,
     )
+
+
+class FakeCameraControl:
+    def __init__(self):
+        self.positions = []
+        self.current_pose = None
+
+    def goto(self, position, yaw_offset, pitch_offset, roll):
+        self.positions.append(list(position))
+        self.current_pose = {"position": list(position)}
+
+    def reset(self):
+        self.current_pose = None
+
+    def current(self):
+        return self.current_pose
+
+    def current_position(self):
+        if self.current_pose is None:
+            return None
+        return self.current_pose["position"]
 
 
 class IntrinsicServiceTest(unittest.TestCase):
@@ -88,6 +110,7 @@ class IntrinsicServiceTest(unittest.TestCase):
             self.assertEqual(len(state["targets"]), 10)
             self.assertIsNone(state["pose"])
             self.assertFalse(state["camera_control"])
+            self.assertIsNone(state["action"])
             self.assertEqual(state["next"], 0)
             self.assertFalse(state["targets"][0]["done"])
 
@@ -98,6 +121,28 @@ class IntrinsicServiceTest(unittest.TestCase):
                 with self.assertRaises(ApiError) as caught:
                     action()
                 self.assertEqual(caught.exception.status, int(HTTPStatus.NOT_FOUND))
+
+    def test_auto_run_is_nonblocking_and_serializes_mutating_actions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = make_service(Path(directory) / "intrinsics.yaml")
+            camera = FakeCameraControl()
+            service.attach_camera_control(camera)
+
+            started = monotonic()
+            accepted = service.auto_run(settle=0.01)
+            self.assertLess(monotonic() - started, 0.1)
+            self.assertTrue(accepted["accepted"])
+            self.assertEqual(accepted["action"]["status"], "running")
+            with self.assertRaises(ApiError) as caught:
+                service.reset()
+            self.assertEqual(caught.exception.status, int(HTTPStatus.CONFLICT))
+
+            deadline = monotonic() + 2.0
+            while service.state()["action"] is not None and monotonic() < deadline:
+                sleep(0.01)
+            self.assertIsNone(service.state()["action"])
+            self.assertEqual(len(camera.positions), 10)
+            self.assertEqual(service.reset()["samples"], 0)
 
     def test_transport_routes_intrinsic_and_gates_when_absent(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -123,6 +168,19 @@ class IntrinsicServiceTest(unittest.TestCase):
                 )
                 with urllib.request.urlopen(request) as response:
                     self.assertEqual(json.loads(response.read())["samples"], 0)
+
+                service.attach_camera_control(FakeCameraControl())
+                service.auto_run = lambda: {
+                    "accepted": True,
+                    "action": {"name": "auto_run", "status": "running"},
+                }
+                request = urllib.request.Request(
+                    base + "/api/v1/intrinsic/auto_run", data=b"{}",
+                    headers={"Content-Type": "application/json"}, method="POST",
+                )
+                with urllib.request.urlopen(request) as response:
+                    self.assertEqual(response.status, int(HTTPStatus.ACCEPTED))
+                    self.assertTrue(json.loads(response.read())["accepted"])
             finally:
                 server.shutdown()
                 server.server_close()
