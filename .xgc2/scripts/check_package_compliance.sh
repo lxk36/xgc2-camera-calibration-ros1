@@ -63,23 +63,26 @@ plugin_path = root / "process-definitions/xgc2-camera-calibration-ros1.json"
 plugin = json.loads(plugin_path.read_text(encoding="utf-8"))
 assert plugin["apiVersion"] == "xgc.execution.process/v1"
 definitions = plugin["definitions"]
-ids = [definition["id"] for definition in definitions]
-assert len(ids) == len(set(ids)) == 3
+keys = [(definition["id"], definition["version"]) for definition in definitions]
+ids = {definition["id"] for definition in definitions}
+assert len(keys) == len(set(keys)) == 5
+assert len(ids) == 3
 assert "xgc2-camera-v4l2-ros1" not in ids
 intrinsic = next(
     item for item in definitions
     if item["id"] == "xgc2-camera-intrinsic-calibrator-ros1"
 )
-extrinsic = next(
-    item for item in definitions
+extrinsic_versions = {
+    item["version"]: item for item in definitions
     if item["id"] == "xgc2-camera-extrinsic-calibrator-ros1"
-)
-assert extrinsic["version"] == "2.0.0"
+}
+assert set(extrinsic_versions) == {"2.0.0", "2.0.1", "2.0.2"}
+extrinsic = extrinsic_versions["2.0.2"]
 assert extrinsic["command"]["executable"] == (
     "/opt/ros/noetic/lib/xgc_camera_calibration/extrinsic_calibrator_web.py"
 )
 assert extrinsic["parameters"]["properties"]["bindAddress"]["default"] == "127.0.0.1"
-assert extrinsic["parameters"]["properties"]["httpPort"]["default"] == 8765
+assert extrinsic["parameters"]["properties"]["httpPort"]["default"] == 18082
 assert "DISPLAY" not in extrinsic["command"]["env"]
 assert intrinsic["version"] == "2.0.0"
 assert intrinsic["command"]["executable"] == (
@@ -114,8 +117,8 @@ assert deb["size"] > 0
 PY
 
 grep -q '^id: xgc2-camera-calibration-ros1$' .xgc2/product.yml
-grep -q '^version: 0.3.0-4$' .xgc2/product.yml
-grep -q '^    focal: 0.3.0-4$' .xgc2/product.yml
+grep -q '^version: 0.3.0-5$' .xgc2/product.yml
+grep -q '^    focal: 0.3.0-5$' .xgc2/product.yml
 if grep -q '^    focal: .*~focal' .xgc2/product.yml; then
   echo "single-distribution ROS1 package version must not retain a focal suffix" >&2
   exit 1
