@@ -21,7 +21,7 @@ import threading
 import time
 from http import HTTPStatus
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -81,6 +81,7 @@ class IntrinsicCalibrationService:
         board_center: Sequence[float] = (2.0, 0.0, 1.5),
         references_dir: str = "",
         align_threshold: float = 1.8,
+        media_source: str = "",
     ):
         if not output_file:
             raise ValueError("output_file must not be empty")
@@ -95,6 +96,7 @@ class IntrinsicCalibrationService:
         self.output_file = str(Path(output_file).expanduser())
         self.image_topic = str(image_topic)
         self.camera_info_topic = str(camera_info_topic)
+        self.media_source = str(media_source).strip()
         self.jpeg_quality = int(jpeg_quality)
         self.sample_distance = float(sample_distance)
         self.maximum_detect_width = int(maximum_detect_width)
@@ -120,6 +122,7 @@ class IntrinsicCalibrationService:
         self.refs: Dict[int, bytes] = {}
         self.align_threshold = float(align_threshold)
         self.camera: Optional[Any] = None
+        self.frame_capture: Optional[Callable[[], np.ndarray]] = None
         self._recording = False
         self.action: Optional[Dict[str, Any]] = None
         self._auto_run_thread: Optional[threading.Thread] = None
@@ -130,6 +133,16 @@ class IntrinsicCalibrationService:
         """Attach an optional sim camera adapter (goto/reset/current pose)."""
         with self.lock:
             self.camera = camera
+
+    def attach_frame_capture(self, capture: Callable[[], np.ndarray]) -> None:
+        """Attach an explicit immutable-frame transaction.
+
+        It is intentionally a callback rather than a persistent subscriber:
+        the browser owns the WebRTC live path, while the calibration algorithm
+        pays for one RGB readback only when an operator captures a sample.
+        """
+        with self.lock:
+            self.frame_capture = capture
 
     def _load_refs(self) -> None:
         if not self.references_dir:
@@ -268,7 +281,7 @@ class IntrinsicCalibrationService:
                 "result": self.result_payload,
                 "output_file": self.output_file,
                 "image_ready": self._display is not None,
-                "image_topic": self.image_topic,
+                "media_source": self.media_source or self.image_topic,
                 "board": {"size": list(self.board_size), "square_size_m": self.square},
                 "targets": targets,
                 "next": next_index,
@@ -303,6 +316,29 @@ class IntrinsicCalibrationService:
         if self.camera is None:
             raise ApiError(HTTPStatus.NOT_FOUND, "No camera control is available")
         return self.camera
+
+    def _capture_frame(self) -> Dict[str, Any]:
+        with self.lock:
+            capture = self.frame_capture
+        if capture is None:
+            raise ApiError(HTTPStatus.SERVICE_UNAVAILABLE, "No calibration frame source is available")
+        try:
+            frame = capture()
+        except ApiError:
+            raise
+        except Exception as error:
+            raise ApiError(HTTPStatus.SERVICE_UNAVAILABLE, "Could not capture a calibration frame: {}".format(error)) from error
+        if not isinstance(frame, np.ndarray):
+            raise ApiError(HTTPStatus.SERVICE_UNAVAILABLE, "Calibration frame source returned no image")
+        self.process_frame(frame)
+        with self.lock:
+            return {"ok": True, "samples": len(self.samples)}
+
+    def capture(self) -> Dict[str, Any]:
+        """Explicitly collect one checkerboard sample from Media Edge."""
+        with self.lock:
+            self._require_idle_locked()
+        return self._capture_frame()
 
     def goto(self, index: int) -> Dict[str, Any]:
         with self.lock:
@@ -383,6 +419,13 @@ class IntrinsicCalibrationService:
                     view["position"], view["yaw_offset"], view["pitch_offset"], view["roll"]
                 )
                 time.sleep(settle)
+                # One bounded snapshot after the pose settles replaces the old
+                # perpetual ROS/JPEG feeder. A missing capture adapter keeps
+                # the guide usable in camera-agnostic test/manual modes.
+                with self.lock:
+                    capture = self.frame_capture
+                if capture is not None:
+                    self._capture_frame()
         except Exception as error:  # Camera-control failures are reported through state.
             with self.lock:
                 self.action = {
@@ -446,7 +489,7 @@ class IntrinsicCalibrationService:
                     result,
                     board_size=self.board_size,
                     square=self.square,
-                    metadata={"image_topic": self.image_topic, "web_calibrator": True},
+                    metadata={"media_source": self.media_source or self.image_topic, "web_calibrator": True},
                 )
             except OSError as error:
                 raise ApiError(

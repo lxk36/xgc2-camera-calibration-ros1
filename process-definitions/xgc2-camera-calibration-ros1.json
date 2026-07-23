@@ -344,6 +344,77 @@
       "restart": {"mode": "never"}
     },
     {
+      "id": "xgc2-camera-extrinsic-calibrator-ros1",
+      "version": "2.1.0",
+      "label": "XGC2 camera extrinsic calibration WebUI",
+      "description": "Serve a compressed live preview, capture one synchronized raw frame on Freeze, solve robust PnP, and persist parent_T_camera_optical.",
+      "drivers": ["host"],
+      "parameters": {
+        "properties": {
+          "imageTopic": {"type": "string", "default": "/usb_cam/image_raw"},
+          "previewImageTopic": {"type": "string", "default": "/usb_cam/image_raw/compressed"},
+          "cameraInfoTopic": {"type": "string", "default": "/usb_cam/camera_info"},
+          "posePrefix": {"type": "string", "default": "/vrpn_client_node"},
+          "trackers": {"type": "string", "default": "", "description": "Comma-separated UAV/UGV names allowed as pose markers; empty discovers all markers under posePrefix."},
+          "outputFile": {"type": "string", "default": "/tmp/xgc2/camera/calibrations/usb_cam/extrinsics.yaml"},
+          "parentFrame": {"type": "string", "default": "map"},
+          "opticalFrame": {"type": "string", "default": "usb_cam_optical_frame"},
+          "maximumMarkerAge": {"type": "number", "default": 0.1, "minimum": 0.0},
+          "maximumErrorPx": {"type": "number", "default": 5.0, "minimum": 0.0},
+          "poseHistorySize": {"type": "integer", "default": 240, "minimum": 2, "maximum": 10000},
+          "freezeImageTimeout": {"type": "number", "default": 2.0, "minimum": 0.1},
+          "jpegQuality": {"type": "integer", "default": 80, "minimum": 1, "maximum": 100},
+          "bindAddress": {"type": "string", "default": "127.0.0.1"},
+          "httpPort": {"type": "integer", "default": 18082, "minimum": 1, "maximum": 65535},
+          "frameAncestors": {"type": "string", "default": "'''self'' http://127.0.0.1:* http://localhost:*'"},
+          "allowedOrigins": {"type": "string", "default": ""},
+          "rosMasterUri": {"type": "string", "default": "http://127.0.0.1:11311"},
+          "rosLogDir": {"type": "string", "default": "/tmp/xgc2/ros/log/camera-calibration"}
+        },
+        "additionalProperties": false
+      },
+      "resourceClaims": [
+        {
+          "bindingKey": "http",
+          "kind": "tcp-listener",
+          "mode": "",
+          "capacity": 0,
+          "address": "127.0.0.1",
+          "portParameter": "httpPort"
+        },
+        {
+          "bindingKey": "ros-node",
+          "kind": "custom",
+          "mode": "",
+          "capacity": 0,
+          "namespace": "ros1-node",
+          "identityParts": [
+            {"parameter": "rosMasterUri"},
+            {"literal": "/xgc_camera_extrinsic_calibrator_web"}
+          ]
+        }
+      ],
+      "command": {
+        "executable": "/opt/ros/noetic/lib/xgc_camera_calibration/extrinsic_calibrator_web.py",
+        "args": ["__name:=xgc_camera_extrinsic_calibrator_web", "_image_topic:=${imageTopic}", "_preview_image_topic:=${previewImageTopic}", "_camera_info_topic:=${cameraInfoTopic}", "_pose_prefix:=${posePrefix}", "_trackers:=${trackers}", "_output_file:=${outputFile}", "_parent_frame:=${parentFrame}", "_child_frame:=${opticalFrame}", "_maximum_marker_age:=${maximumMarkerAge}", "_maximum_inlier_error_px:=${maximumErrorPx}", "_pose_history_size:=${poseHistorySize}", "_freeze_image_timeout:=${freezeImageTimeout}", "_jpeg_quality:=${jpegQuality}", "_bind_address:=${bindAddress}", "_http_port:=${httpPort}", "_frame_ancestors:=${frameAncestors}", "_allowed_origins:=${allowedOrigins}"],
+        "env": {
+          "ROS_MASTER_URI": "${rosMasterUri}",
+          "ROS_LOG_DIR": "${rosLogDir}",
+          "ROS_DISTRO": "noetic",
+          "ROS_VERSION": "1",
+          "ROS_PYTHON_VERSION": "3",
+          "ROS_ROOT": "/opt/ros/noetic/share/ros",
+          "ROS_PACKAGE_PATH": "/opt/ros/noetic/share",
+          "PYTHONPATH": "/opt/ros/noetic/lib/python3/dist-packages",
+          "PATH": "/opt/ros/noetic/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        }
+      },
+      "readiness": {"kind": "process"},
+      "liveness": {"kind": "process"},
+      "stop": {"gracePeriod": 5000000000},
+      "restart": {"mode": "never"}
+    },
+    {
       "id": "xgc2-camera-extrinsic-tf-ros1",
       "version": "1.0.0",
       "label": "XGC2 camera extrinsic TF",

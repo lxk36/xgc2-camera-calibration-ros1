@@ -7,6 +7,7 @@ import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
+from unittest.mock import patch
 
 import cv2
 import numpy as np
@@ -25,8 +26,10 @@ from xgc_camera_calibration.web_service import (
 
 class FakeSource:
     image_topic = "/camera/image_raw"
+    preview_image_topic = "/camera/image_raw/compressed"
     camera_info_topic = "/camera/camera_info"
     pose_prefix = "/vrpn_client_node"
+    preview_jpeg = b"\xff\xd8cached-compressed-preview\xff\xd9"
 
     def __init__(self, snapshot):
         self.snapshot = snapshot
@@ -34,9 +37,11 @@ class FakeSource:
     def status(self):
         return {
             "image_topic": self.image_topic,
+            "preview_image_topic": self.preview_image_topic,
             "camera_info_topic": self.camera_info_topic,
             "pose_prefix": self.pose_prefix,
             "image_ready": True,
+            "preview_ready": True,
             "camera_info_ready": True,
             "marker_count": len(self.snapshot.markers),
             "marker_names": sorted(self.snapshot.markers),
@@ -48,8 +53,8 @@ class FakeSource:
             raise AssertionError("unexpected freeze arguments")
         return self.snapshot
 
-    def preview_image(self):
-        return self.snapshot.image
+    def preview_jpeg_bytes(self):
+        return self.preview_jpeg
 
 
 class WebCalibrationServiceTest(unittest.TestCase):
@@ -142,6 +147,17 @@ class WebCalibrationServiceTest(unittest.TestCase):
         document = load_extrinsic(self.output)
         self.assertTrue(document["metadata"]["web_calibrator"])
         self.assertEqual(document["metadata"]["image_topic"], FakeSource.image_topic)
+
+    def test_live_preview_reuses_compressed_jpeg_without_reencoding(self):
+        with patch.object(
+            self.service,
+            "_encode_jpeg",
+            side_effect=AssertionError("live preview must not be re-encoded"),
+        ):
+            self.assertEqual(
+                self.service.image_jpeg(),
+                FakeSource.preview_jpeg,
+            )
 
     def test_rejects_duplicate_marker_and_stale_generation(self):
         self.service.freeze()

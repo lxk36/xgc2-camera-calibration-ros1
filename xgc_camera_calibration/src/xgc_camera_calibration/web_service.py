@@ -295,10 +295,13 @@ class CalibrationService:
         with self.lock:
             if self.frozen_jpeg is not None:
                 return self.frozen_jpeg
-        image = self.source.preview_image()
-        if image is None:
-            raise ApiError(HTTPStatus.SERVICE_UNAVAILABLE, "No camera image has arrived")
-        return self._encode_jpeg(image)
+        preview = self.source.preview_jpeg_bytes()
+        if preview is None:
+            raise ApiError(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                "No compressed camera preview has arrived",
+            )
+        return preview
 
     def solve(self, request: Any) -> Dict[str, Any]:
         if not isinstance(request, dict):
@@ -625,6 +628,11 @@ class CalibrationRequestHandler(BaseHTTPRequestHandler):
                 if request not in ({}, None):
                     raise ApiError(HTTPStatus.BAD_REQUEST, "Reset request must be an empty object")
                 self._send_json(HTTPStatus.OK, self._intrinsic().reset())
+                return
+            if path == "/api/v1/intrinsic/capture":
+                if request not in ({}, None):
+                    raise ApiError(HTTPStatus.BAD_REQUEST, "Capture request must be an empty object")
+                self._send_json(HTTPStatus.OK, self._intrinsic().capture())
                 return
             if path == "/api/v1/intrinsic/goto":
                 index = request.get("index") if isinstance(request, dict) else None

@@ -65,7 +65,7 @@ assert plugin["apiVersion"] == "xgc.execution.process/v1"
 definitions = plugin["definitions"]
 keys = [(definition["id"], definition["version"]) for definition in definitions]
 ids = {definition["id"] for definition in definitions}
-assert len(keys) == len(set(keys)) == 7
+assert len(keys) == len(set(keys)) == 8
 assert len(ids) == 3
 assert "xgc2-camera-v4l2-ros1" not in ids
 intrinsic_versions = {
@@ -79,8 +79,8 @@ extrinsic_versions = {
     item["version"]: item for item in definitions
     if item["id"] == "xgc2-camera-extrinsic-calibrator-ros1"
 }
-assert set(extrinsic_versions) == {"2.0.0", "2.0.1", "2.0.2"}
-extrinsic = extrinsic_versions["2.0.2"]
+assert set(extrinsic_versions) == {"2.0.0", "2.0.1", "2.0.2", "2.1.0"}
+extrinsic = extrinsic_versions["2.1.0"]
 tf_versions = {
     item["version"]: item for item in definitions
     if item["id"] == "xgc2-camera-extrinsic-tf-ros1"
@@ -95,6 +95,12 @@ assert extrinsic["command"]["executable"] == (
 )
 assert extrinsic["parameters"]["properties"]["bindAddress"]["default"] == "127.0.0.1"
 assert extrinsic["parameters"]["properties"]["httpPort"]["default"] == 18082
+assert extrinsic["parameters"]["properties"]["previewImageTopic"]["default"] == (
+    "/usb_cam/image_raw/compressed"
+)
+assert extrinsic["parameters"]["properties"]["freezeImageTimeout"]["default"] == 2.0
+assert "_preview_image_topic:=${previewImageTopic}" in extrinsic["command"]["args"]
+assert "_freeze_image_timeout:=${freezeImageTimeout}" in extrinsic["command"]["args"]
 assert "DISPLAY" not in extrinsic["command"]["env"]
 assert intrinsic_legacy["parameters"]["properties"]["httpPort"]["default"] == 8766
 assert intrinsic_legacy["parameters"]["properties"]["outputFile"]["default"] == (
@@ -168,6 +174,13 @@ grep -q '/workspace/repo/process-definitions/' .xgc2/scripts/build_debs_in_docke
 grep -q '/workspace/work/src/process-definitions/' .xgc2/scripts/build_debs_in_docker.sh
 grep -q '<exec_depend>gazebo_msgs</exec_depend>' xgc_camera_calibration/package.xml
 grep -q '<exec_depend>tf</exec_depend>' xgc_camera_calibration/package.xml
+grep -q 'CompressedImage' xgc_camera_calibration/scripts/extrinsic_calibrator_web.py
+grep -q 'wait_for_message' xgc_camera_calibration/scripts/extrinsic_calibrator_web.py
+if grep -q 'Subscriber(.*self.image_topic' \
+  xgc_camera_calibration/scripts/extrinsic_calibrator_web.py; then
+  echo "extrinsic calibrator must not retain a steady-state raw image subscription" >&2
+  exit 1
+fi
 grep -q 'ros-noetic-gazebo-msgs' .xgc2/product.yml
 grep -q 'ros-noetic-tf$' .xgc2/product.yml
 grep -q 'ros-noetic-gazebo-msgs.*ros-noetic-geometry-msgs' .xgc2/scripts/package_debs.sh

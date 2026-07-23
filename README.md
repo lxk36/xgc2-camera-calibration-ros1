@@ -42,6 +42,7 @@ then solves and persists `parent_T_camera_optical` using robust PnP.
 ```bash
 roslaunch xgc_camera_calibration extrinsic_calibrator.launch \
   image_topic:=/usb_cam/image_raw \
+  preview_image_topic:=/usb_cam/image_raw/compressed \
   camera_info_topic:=/usb_cam/camera_info \
   pose_prefix:=/vrpn_client_node \
   bind_address:=127.0.0.1 http_port:=8765
@@ -51,6 +52,13 @@ Open `http://127.0.0.1:8765/`. The solver requires valid intrinsic values, but
 those values are an input contract rather than a package dependency. They may
 come from the intrinsic tool above, a vendor calibration, or an existing
 calibration asset.
+
+The live view consumes the canonical JPEG-compressed image transport and
+returns those bytes directly to the browser. The raw image topic is subscribed
+only while handling Freeze, so the synchronized frame used by PnP retains full
+source quality without continuously moving or re-encoding raw frames in the
+WebUI process. A camera must publish both configured topics; there is no raw
+preview fallback.
 
 Publish a solved fixed-camera transform with:
 

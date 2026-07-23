@@ -12,7 +12,7 @@ import numpy as np
 import rospkg
 import rospy
 from geometry_msgs.msg import PoseStamped
-from sensor_msgs.msg import CameraInfo, Image
+from sensor_msgs.msg import CameraInfo, CompressedImage, Image
 
 from xgc_camera_calibration.web_service import (
     ApiError,
@@ -36,9 +36,19 @@ class RosCalibrationSource:
     def __init__(self):
         self.lock = threading.RLock()
         self.image_topic = normalize_topic(rospy.get_param("~image_topic", "/usb_cam/image_raw"))
+        self.preview_image_topic = normalize_topic(
+            rospy.get_param(
+                "~preview_image_topic", "/usb_cam/image_raw/compressed"
+            )
+        )
         self.camera_info_topic = normalize_topic(
             rospy.get_param("~camera_info_topic", "/usb_cam/camera_info")
         )
+        self.freeze_image_timeout = float(
+            rospy.get_param("~freeze_image_timeout", 2.0)
+        )
+        if self.freeze_image_timeout <= 0.0:
+            raise ValueError("~freeze_image_timeout must be positive")
         self.pose_prefix = normalize_topic(
             rospy.get_param("~pose_prefix", "/vrpn_client_node")
         ).rstrip("/")
@@ -54,18 +64,19 @@ class RosCalibrationSource:
         self.pose_history_size = int(rospy.get_param("~pose_history_size", 240))
         if self.pose_history_size < 2:
             raise ValueError("~pose_history_size must be at least 2")
-        self.image_message = None
+        self.preview_jpeg = None
+        self.preview_stamp_sec = None
         self.camera_info = None
         self.marker_latest = {}
         self.marker_history = {}
         self.marker_subscribers = {}
         self.marker_topics = {}
-        self.image_subscriber = rospy.Subscriber(
-            self.image_topic,
-            Image,
-            self._image_callback,
+        self.preview_subscriber = rospy.Subscriber(
+            self.preview_image_topic,
+            CompressedImage,
+            self._preview_callback,
             queue_size=1,
-            buff_size=2**24,
+            buff_size=2**20,
         )
         self.info_subscriber = rospy.Subscriber(
             self.camera_info_topic, CameraInfo, self._info_callback, queue_size=1
@@ -73,9 +84,27 @@ class RosCalibrationSource:
         self.discovery_timer = rospy.Timer(rospy.Duration(1.0), self._refresh_markers)
         self._refresh_markers(None)
 
-    def _image_callback(self, message):
+    def _preview_callback(self, message):
+        image_format = str(message.format).strip().lower()
+        payload = bytes(message.data)
+        if (
+            not payload.startswith(b"\xff\xd8")
+            or ("jpeg" not in image_format and "jpg" not in image_format)
+        ):
+            rospy.logwarn_throttle(
+                5.0,
+                "Ignoring non-JPEG compressed preview on %s (format=%r)",
+                self.preview_image_topic,
+                message.format,
+            )
+            return
+        stamp = message.header.stamp
+        stamp_sec = float(
+            (stamp if not stamp.is_zero() else rospy.Time.now()).to_sec()
+        )
         with self.lock:
-            self.image_message = message
+            self.preview_jpeg = payload
+            self.preview_stamp_sec = stamp_sec
 
     def _info_callback(self, message):
         with self.lock:
@@ -144,44 +173,51 @@ class RosCalibrationSource:
         except (TypeError, ValueError, cv2.error) as error:
             raise ApiError(409, "Could not convert camera image: {}".format(error)) from error
 
-    def preview_image(self):
+    def preview_jpeg_bytes(self):
         with self.lock:
-            message = self.image_message
-        if message is None:
-            return None
-        return self._convert_image(message)
+            return self.preview_jpeg
 
     def status(self):
         with self.lock:
-            image = self.image_message
+            preview_ready = self.preview_jpeg is not None
             info = self.camera_info
             marker_names = sorted(
                 name for name, history in self.marker_history.items() if history
             )
-            stamp_sec = None
-            if image is not None:
-                stamp = image.header.stamp
-                stamp_sec = float((stamp if not stamp.is_zero() else rospy.Time.now()).to_sec())
             return {
                 "image_topic": self.image_topic,
+                "preview_image_topic": self.preview_image_topic,
                 "camera_info_topic": self.camera_info_topic,
                 "pose_prefix": self.pose_prefix,
-                "image_ready": image is not None,
+                "image_ready": preview_ready,
+                "preview_ready": preview_ready,
                 "camera_info_ready": info is not None,
                 "marker_count": len(marker_names),
                 "marker_names": marker_names,
-                "latest_image_stamp_sec": stamp_sec,
+                "latest_image_stamp_sec": self.preview_stamp_sec,
             }
 
     def freeze(self, parent_frame, maximum_marker_age):
+        try:
+            image_message = rospy.wait_for_message(
+                self.image_topic,
+                Image,
+                timeout=self.freeze_image_timeout,
+            )
+        except rospy.ROSException as error:
+            raise ApiError(
+                503,
+                "No raw camera image arrived within {:.3f}s".format(
+                    self.freeze_image_timeout
+                ),
+            ) from error
         with self.lock:
-            image_message = self.image_message
             camera_info = self.camera_info
             histories = {
                 name: tuple(history) for name, history in self.marker_history.items()
             }
-        if image_message is None or camera_info is None:
-            raise ApiError(409, "Image and CameraInfo have not both arrived")
+        if camera_info is None:
+            raise ApiError(409, "CameraInfo has not arrived")
         image_stamp = image_message.header.stamp
         if image_stamp.is_zero():
             image_stamp = rospy.Time.now()
@@ -296,10 +332,12 @@ def main():
     )
     server_thread.start()
     rospy.loginfo(
-        "Camera extrinsic WebUI listening on http://%s:%d (image=%s, poses=%s)",
+        "Camera extrinsic WebUI listening on http://%s:%d "
+        "(raw=%s, preview=%s, poses=%s)",
         bind_address,
         http_port,
         source.image_topic,
+        source.preview_image_topic,
         source.pose_prefix,
     )
     try:
