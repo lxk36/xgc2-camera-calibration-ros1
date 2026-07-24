@@ -60,7 +60,6 @@ ownership:
   - /opt/ros/noetic/share/xgc_camera_calibration
   - /opt/ros/noetic/lib/xgc_camera_calibration
   - /opt/ros/noetic/lib/python3/dist-packages/xgc_camera_calibration
-  - /usr/share/xgc2/process-definitions/xgc2-camera-calibration-ros1.json
 release:
   repository: lxk36/xgc2-camera-calibration-ros1
   ref: main

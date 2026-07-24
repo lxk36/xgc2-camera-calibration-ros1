@@ -17,9 +17,6 @@ install(DIRECTORY launch
 install(DIRECTORY web
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../process-definitions/xgc2-camera-calibration-ros1.json
-  DESTINATION /usr/share/xgc2/process-definitions
-)
 
 if(CATKIN_ENABLE_TESTING)
   catkin_add_nosetests(test/test_solver.py)

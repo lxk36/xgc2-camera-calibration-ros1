@@ -59,7 +59,6 @@ for path in sorted(root.glob("xgc_camera_*/package.xml")):
 for path in sorted(root.glob("xgc_camera_*/*/*.launch")):
     ET.parse(path)
 
-plugin_path = root / "process-definitions/xgc2-camera-calibration-ros1.json"
 plugin = json.loads(plugin_path.read_text(encoding="utf-8"))
 assert plugin["apiVersion"] == "xgc.execution.process/v1"
 definitions = plugin["definitions"]
@@ -169,9 +168,6 @@ if grep -q '^    focal: .*~focal' .xgc2/product.yml; then
   echo "single-distribution ROS1 package version must not retain a focal suffix" >&2
   exit 1
 fi
-grep -q '/usr/share/xgc2/process-definitions' xgc_camera_calibration/CMakeLists.txt
-grep -q '/workspace/repo/process-definitions/' .xgc2/scripts/build_debs_in_docker.sh
-grep -q '/workspace/work/src/process-definitions/' .xgc2/scripts/build_debs_in_docker.sh
 grep -q '<exec_depend>gazebo_msgs</exec_depend>' xgc_camera_calibration/package.xml
 grep -q '<exec_depend>tf</exec_depend>' xgc_camera_calibration/package.xml
 grep -q 'CompressedImage' xgc_camera_calibration/scripts/extrinsic_calibrator_web.py
@@ -191,7 +187,6 @@ for page in extrinsic intrinsic; do
   test -f "xgc_camera_calibration/web/${page}/styles.css"
 done
 if grep -R --exclude-dir=__pycache__ -E '(PyQt|python3-pyqt5|extrinsic_calibrator_ui)' \
-  process-definitions xgc_camera_calibration README.md \
   .xgc2/product.yml .xgc2/scripts/package_debs.sh \
   .xgc2/scripts/build_debs_in_docker.sh \
   .xgc2/scripts/check_installed_packages.sh >/dev/null; then
@@ -199,7 +194,6 @@ if grep -R --exclude-dir=__pycache__ -E '(PyQt|python3-pyqt5|extrinsic_calibrato
   exit 1
 fi
 if grep -R -E -i '(xgc_camera_driver|libxgc2-camera-dev|ros-noetic-xgc-camera-driver)' \
-  process-definitions xgc_camera_calibration .xgc2/product.yml \
   .xgc2/scripts/build_debs_in_docker.sh .xgc2/scripts/package_debs.sh \
   .xgc2/scripts/check_installed_packages.sh >/dev/null; then
   echo "camera driver dependency leaked into the independent calibration product" >&2

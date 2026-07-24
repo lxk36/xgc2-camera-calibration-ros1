@@ -3,7 +3,6 @@ set -euo pipefail
 
 ROS_DISTRO="${ROS_DISTRO:-noetic}"
 PREFIX="/opt/ros/${ROS_DISTRO}"
-PLUGIN="/usr/share/xgc2/process-definitions/xgc2-camera-calibration-ros1.json"
 
 source "${PREFIX}/setup.bash"
 dpkg -s ros-noetic-xgc2-camera-calibration >/dev/null

@@ -45,7 +45,6 @@ copy_path() {
 copy_path "${INSTALL_ROOT}${PREFIX}/share/xgc_camera_calibration"
 copy_path "${INSTALL_ROOT}${PREFIX}/lib/xgc_camera_calibration"
 copy_path "${INSTALL_ROOT}${PREFIX}/lib/python3/dist-packages/xgc_camera_calibration"
-copy_path "${INSTALL_ROOT}/usr/share/xgc2/process-definitions/xgc2-camera-calibration-ros1.json"
 
 mkdir -p "${PACKAGE_ROOT}/DEBIAN" "${PACKAGE_ROOT}/usr/share/doc/${PACKAGE_NAME}"
 cat >"${PACKAGE_ROOT}/DEBIAN/control" <<EOF
@@ -66,7 +65,6 @@ install -m 0644 "${REPO_ROOT}/LICENSE" "${PACKAGE_ROOT}/usr/share/doc/${PACKAGE_
 test -f "${PACKAGE_ROOT}${PREFIX}/lib/python3/dist-packages/xgc_camera_calibration/solver.py"
 test -f "${PACKAGE_ROOT}${PREFIX}/share/xgc_camera_calibration/web/intrinsic/index.html"
 test -f "${PACKAGE_ROOT}${PREFIX}/share/xgc_camera_calibration/web/extrinsic/index.html"
-test -f "${PACKAGE_ROOT}/usr/share/xgc2/process-definitions/xgc2-camera-calibration-ros1.json"
 find "${PACKAGE_ROOT}" -type d -name __pycache__ -prune -exec rm -rf {} +
 find "${PACKAGE_ROOT}" -type d -exec chmod 0755 {} +
 find "${PACKAGE_ROOT}" -type f -exec chmod 0644 {} +
